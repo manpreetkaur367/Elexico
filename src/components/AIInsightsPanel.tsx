@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, Send, Bot, User, Lightbulb, CheckCircle2, Trash2, Pencil, Check, X } from "lucide-react";
+import { Sparkles, Send, Bot, User, Lightbulb, CheckCircle2, Trash2, Pencil, Check, X, BarChart2, Cpu, BookOpen, Zap } from "lucide-react";
 import type { Slide } from "../data/slides";
 
 const GEMINI_API_KEY = (import.meta.env.VITE_GEMINI_API_KEY || "") as string;
@@ -223,19 +223,13 @@ export default function AIInsightsPanel({ slide }: AIInsightsPanelProps) {
             transition={{ duration: 0.2 }}
             className="flex-1 overflow-y-auto px-5 py-4 space-y-5 scrollbar-thin min-h-0"
           >
-            {/* AI Analogy */}
+            {/* Description */}
             <div>
               <div className="flex items-center gap-2 mb-2.5">
-                <Lightbulb className="w-3.5 h-3.5 text-amber-400" />
-                <span className="text-[11px] font-black text-gray-400 uppercase tracking-[0.14em]">Simple Analogy</span>
+                <BookOpen className="w-3.5 h-3.5 text-blue-500" />
+                <span className="text-[11px] font-black text-gray-400 uppercase tracking-[0.14em]">What is it?</span>
               </div>
-              <div className="rounded-xl p-4 relative overflow-hidden"
-                style={{ background: "#2563eb0c", border: "1px solid #2563eb22" }}>
-                {/* Ambient glow */}
-                <div className="absolute top-0 right-0 w-20 h-20 pointer-events-none"
-                  style={{ background: "radial-gradient(circle, #2563eb20 0%, transparent 70%)", transform: "translate(25%, -25%)" }} />
-                <p className="text-[13px] text-gray-600 leading-relaxed relative z-10">{slide.aiInsight}</p>
-              </div>
+              <p className="text-[13px] text-gray-600 leading-relaxed">{slide.description}</p>
             </div>
 
             {/* Key Points */}
@@ -250,7 +244,7 @@ export default function AIInsightsPanel({ slide }: AIInsightsPanelProps) {
                     key={i}
                     initial={{ opacity: 0, x: -6 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.1 + i * 0.06 }}
+                    transition={{ delay: 0.05 + i * 0.06 }}
                     className="flex items-start gap-2.5">
                     <div className="mt-[5px] w-4 h-4 rounded-md flex-shrink-0 flex items-center justify-center"
                       style={{ background: "#2563eb16", border: "1px solid #2563eb28" }}>
@@ -262,7 +256,76 @@ export default function AIInsightsPanel({ slide }: AIInsightsPanelProps) {
               </ul>
             </div>
 
-            {/* Suggestions */}
+            {/* Stats */}
+            <div>
+              <div className="flex items-center gap-2 mb-2.5">
+                <BarChart2 className="w-3.5 h-3.5 text-indigo-500" />
+                <span className="text-[11px] font-black text-gray-400 uppercase tracking-[0.14em]">Quick Stats</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {slide.stats.map((stat, i) => (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.05 + i * 0.06 }}
+                    className="rounded-xl px-3 py-2.5 text-center"
+                    style={{ background: "#f8faff", border: "1px solid #e2e8f0" }}>
+                    <p className="text-[14px] font-black text-blue-600 leading-tight">{stat.value}</p>
+                    <p className="text-[10px] text-gray-400 font-semibold mt-0.5">{stat.label}</p>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+
+            {/* Tech Stack */}
+            <div>
+              <div className="flex items-center gap-2 mb-2.5">
+                <Cpu className="w-3.5 h-3.5 text-violet-500" />
+                <span className="text-[11px] font-black text-gray-400 uppercase tracking-[0.14em]">Tech Stack</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {slide.techStack.map((tech, i) => (
+                  <motion.span
+                    key={i}
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.05 + i * 0.05 }}
+                    className="px-3 py-1 rounded-full text-[11px] font-black text-white"
+                    style={{ background: tech.color }}>
+                    {tech.name}
+                  </motion.span>
+                ))}
+              </div>
+            </div>
+
+            {/* Real World Example */}
+            <div>
+              <div className="flex items-center gap-2 mb-2.5">
+                <Zap className="w-3.5 h-3.5 text-amber-500" />
+                <span className="text-[11px] font-black text-gray-400 uppercase tracking-[0.14em]">Real World</span>
+              </div>
+              <div className="rounded-xl p-3.5 relative overflow-hidden"
+                style={{ background: "#fffbeb", border: "1px solid #fde68a" }}>
+                <p className="text-[12.5px] text-amber-800 leading-relaxed">{slide.realWorldExample}</p>
+              </div>
+            </div>
+
+            {/* Simple Analogy */}
+            <div>
+              <div className="flex items-center gap-2 mb-2.5">
+                <Lightbulb className="w-3.5 h-3.5 text-amber-400" />
+                <span className="text-[11px] font-black text-gray-400 uppercase tracking-[0.14em]">Simple Analogy</span>
+              </div>
+              <div className="rounded-xl p-3.5 relative overflow-hidden"
+                style={{ background: "#2563eb0c", border: "1px solid #2563eb22" }}>
+                <div className="absolute top-0 right-0 w-20 h-20 pointer-events-none"
+                  style={{ background: "radial-gradient(circle, #2563eb20 0%, transparent 70%)", transform: "translate(25%, -25%)" }} />
+                <p className="text-[12.5px] text-gray-600 leading-relaxed relative z-10">{slide.aiInsight}</p>
+              </div>
+            </div>
+
+            {/* Ask AI suggestions */}
             <div>
               <p className="text-[11px] font-black text-gray-400 uppercase tracking-[0.14em] mb-2.5">Ask AI</p>
               <div className="flex flex-col gap-2">

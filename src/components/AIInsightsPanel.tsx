@@ -1,25 +1,42 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, Send, Bot, User, Lightbulb, CheckCircle2 } from "lucide-react";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { Slide } from "../data/slides";
 
-// Initialise Gemini client
-const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY as string);
-const geminiModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string;
+const GEMINI_MODEL = "gemini-2.5-flash-lite";
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
 async function getAIResponse(question: string, slide: Slide): Promise<string> {
   try {
-    const systemContext = `You are ElexicoAI, an expert backend engineering tutor embedded inside an interactive presentation app. 
-The user is currently viewing a slide titled "${slide.title}" about: ${slide.description}
-Key points covered: ${slide.keyPoints.join(", ")}.
-Answer concisely (2-4 sentences max), in a friendly and educational tone. Focus on backend engineering concepts.`;
+    const prompt = `You are ElexicoAI, an expert backend engineering tutor inside an interactive presentation app.
+The user is viewing a slide titled "${slide.title}" about: ${slide.description}
+Key points: ${slide.keyPoints.join(", ")}.
+Answer concisely (2-4 sentences), in a friendly educational tone. Focus on backend engineering.
 
-    const result = await geminiModel.generateContent(`${systemContext}\n\nUser question: ${question}`);
-    return result.response.text();
+User question: ${question}`;
+
+    const res = await fetch(GEMINI_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.7, maxOutputTokens: 256 },
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      console.error("Gemini API error:", err);
+      throw new Error(err?.error?.message ?? "API error");
+    }
+
+    const data = await res.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim()
+      ?? `Here's a quick answer: ${slide.aiInsight}`;
   } catch (err) {
-    console.error("Gemini error:", err);
-    return `Sorry, I couldn't reach the AI right now. Here's a quick answer: ${slide.aiInsight}`;
+    console.error("Gemini fetch error:", err);
+    return `Here's a quick answer: ${slide.aiInsight}`;
   }
 }
 

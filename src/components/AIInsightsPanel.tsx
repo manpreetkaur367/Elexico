@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, Send, Bot, User, Lightbulb, CheckCircle2 } from "lucide-react";
 import type { Slide } from "../data/slides";
 
-const GEMINI_API_KEY = (import.meta.env.VITE_GEMINI_API_KEY || "AIzaSyCo5e65O5Kl0MYBB-s17BjEn8ShZB74knw") as string;
+const GEMINI_API_KEY = (import.meta.env.VITE_GEMINI_API_KEY || "") as string;
 
 // Put working models FIRST — ones with quota available
 const GEMINI_MODELS = [

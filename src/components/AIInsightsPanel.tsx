@@ -18,20 +18,20 @@ function geminiUrl(model: string) {
 }
 
 async function getAIResponse(question: string, slide: Slide): Promise<string> {
-  const prompt = `You are ElexicoAI, a smart and friendly AI assistant inside an interactive learning app.
-You have deep expertise in backend engineering, software development, computer science, and general technology topics.
+  const prompt = `You are ElexicoAI, a concise AI assistant inside a learning app.
 
-Current slide context (use for slide-related questions):
-- Slide title: "${slide.title}"
-- About: ${slide.description}
-- Key points: ${slide.keyPoints.join(", ")}
+STRICT RULES — follow these exactly:
+1. Answer in 2-3 short, simple sentences ONLY. Never more.
+2. Use plain, easy-to-understand language. No jargon unless asked.
+3. Answer ANY question asked — backend, general knowledge, science, math, history, anything.
+4. Never use bullet points, lists, or headers. Just plain sentences.
+5. Never say you can't answer or that something is out of scope.
 
-Instructions:
-- If the question relates to the current slide or backend engineering, give a focused educational answer (2-5 sentences).
-- If the question is general knowledge, science, math, history, or ANY other topic — answer it normally and helpfully. Do NOT refuse.
-- Always be friendly, clear, and accurate. Never say you can only answer backend questions.
+Current slide (for context only if relevant): "${slide.title}"
 
-User question: ${question}`;
+Question: ${question}
+
+Answer in 2-3 sentences:`;
 
   for (const model of GEMINI_MODELS) {
     try {
@@ -40,7 +40,7 @@ User question: ${question}`;
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.7, maxOutputTokens: 512 },
+          generationConfig: { temperature: 0.5, maxOutputTokens: 150 },
         }),
       });
 

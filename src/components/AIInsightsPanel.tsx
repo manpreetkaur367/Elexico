@@ -6,7 +6,7 @@ import type { Slide } from "../data/slides";
 
 // Initialise Gemini client
 const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY as string);
-const geminiModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+const geminiModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
 
 async function getAIResponse(question: string, slide: Slide): Promise<string> {
   try {

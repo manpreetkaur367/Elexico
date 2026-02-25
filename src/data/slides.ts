@@ -38,7 +38,7 @@ export const slides: Slide[] = [
     subtitle: "What powers every app you use",
     color: "#1d4ed8",
     icon: "Server",
-    description: "The backend is the invisible powerhouse behind every web application. While users interact with the frontend, the backend handles all the heavy lifting — processing requests, running business logic, managing databases, and enforcing security. Without a backend, apps would be static, disconnected, and powerless.",
+    description: "The backend is the hidden engine of every app — it handles logic, databases, security, and APIs while users only see the frontend.",
     keyPoints: [
       "Handles business logic, data & security",
       "Communicates with databases via APIs",
@@ -72,7 +72,7 @@ export const slides: Slide[] = [
     subtitle: "The muscle behind your applications",
     color: "#7c3aed",
     icon: "HardDrive",
-    description: "A server is a dedicated computer that listens for requests from clients and responds with data, files, or computed results. Modern servers are either physical machines in data centers or virtual cloud instances. They run 24/7, serving thousands of users simultaneously with near-zero downtime.",
+    description: "A server is a computer that runs 24/7, listens for requests from users, and sends back the right response — data, files, or results.",
     keyPoints: [
       "Web Servers serve files — Nginx, Apache",
       "App Servers run logic — Node.js, Gunicorn",
@@ -106,7 +106,7 @@ export const slides: Slide[] = [
     subtitle: "The language apps use to talk to each other",
     color: "#059669",
     icon: "Zap",
-    description: "An API (Application Programming Interface) defines a contract between systems — specifying how software components communicate. APIs allow your frontend, mobile app, third-party services, and backend to exchange data in a structured, secure, and predictable way. They are the backbone of the modern internet.",
+    description: "An API is a contract between systems — it defines how apps talk to each other to exchange data in a structured, secure way.",
     keyPoints: [
       "REST: Uses HTTP verbs — GET, POST, PUT, DELETE",
       "GraphQL: Client asks for exactly what it needs",
@@ -142,7 +142,7 @@ export const slides: Slide[] = [
     subtitle: "Where your app's memory lives",
     color: "#d97706",
     icon: "Database",
-    description: "A database is an organized, persistent collection of data managed by a Database Management System (DBMS). It stores everything your app needs to remember — user profiles, transactions, posts, messages. Choosing the right database type (SQL vs NoSQL) is one of the most critical architectural decisions in backend development.",
+    description: "A database stores everything your app needs to remember — users, posts, orders — either in structured SQL tables or flexible NoSQL collections.",
     keyPoints: [
       "SQL (PostgreSQL, MySQL): Structured, great for relations",
       "NoSQL (MongoDB): Flexible schema, great for documents",
@@ -178,7 +178,7 @@ export const slides: Slide[] = [
     subtitle: "Proving who you are — and what you can access",
     color: "#dc2626",
     icon: "Lock",
-    description: "Authentication (AuthN) verifies identity — 'Who are you?' Authorization (AuthZ) controls access — 'What are you allowed to do?' Together they form the security foundation of every backend. Modern auth combines cryptographic tokens, hashed passwords, and layered security measures to protect user data.",
+    description: "Authentication checks who you are; Authorization checks what you can do — together they protect every user's data and account.",
     keyPoints: [
       "Passwords hashed with bcrypt — never stored as plain text",
       "JWT: Signed token carries user identity, no DB lookup needed",
@@ -214,7 +214,7 @@ export const slides: Slide[] = [
     subtitle: "JavaScript's takeover of the server side",
     color: "#16a34a",
     icon: "Code2",
-    description: "Node.js brought JavaScript to the server in 2009, revolutionizing web development by enabling full-stack JS. Its non-blocking, event-driven I/O model makes it perfect for high-concurrency apps. Express.js sits on top as the minimalist framework that powers millions of web APIs worldwide.",
+    description: "Node.js runs JavaScript on the server and handles thousands of requests at once. Express is the lightweight framework built on top of it for building APIs.",
     keyPoints: [
       "Event Loop: Single-threaded, handles thousands of async tasks",
       "npm: 2.5M+ packages — world's largest code ecosystem",
@@ -250,7 +250,7 @@ export const slides: Slide[] = [
     subtitle: "The 8-step journey of every web request",
     color: "#0891b2",
     icon: "ArrowLeftRight",
-    description: "Every single interaction on the web — loading a page, submitting a form, clicking a button — follows the HTTP request-response cycle. Understanding this cycle is fundamental to debugging, optimizing performance, and building reliable web applications.",
+    description: "Every web interaction — clicking a button, loading a page — follows the same cycle: browser sends a request, server processes it, and sends back a response.",
     keyPoints: [
       "DNS lookup converts domain name to an IP address",
       "TCP + TLS handshake establishes a secure connection",
@@ -284,7 +284,7 @@ export const slides: Slide[] = [
     subtitle: "When milliseconds matter — bidirectional live data",
     color: "#9333ea",
     icon: "Radio",
-    description: "Real-time systems eliminate the request-response waiting game. Using persistent connections (WebSockets) or event streams (SSE), both server and client can push data to each other instantly. This enables live collaboration, instant messaging, live dashboards, and multiplayer experiences that feel magical.",
+    description: "Real-time systems let the server push data to users instantly — no waiting, no refreshing — powering live chat, notifications, and multiplayer apps.",
     keyPoints: [
       "WebSockets: Persistent connection — server & client talk anytime",
       "Socket.IO: WebSockets with rooms, fallbacks & auto-reconnect",

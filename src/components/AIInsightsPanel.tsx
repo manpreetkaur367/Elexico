@@ -21,26 +21,17 @@ function geminiUrl(model: string) {
 
 // ── AI-generated summary for the Summary tab ──────────────────────────────
 async function getAISummaryData(slide: Slide): Promise<{ description: string; keyPoints: string[] }> {
-  const prompt = `You are ElexicoAI. A student is learning about "${slide.title}" in a backend engineering course.
+  const prompt = `You are ElexicoAI. Topic: "${slide.title}".
 
-STRICT RULES:
-1. Description: Write EXACTLY 1 short sentence (max 15 words). Use a simple analogy or plain everyday language. Do NOT copy the slide.
-2. Key Points: Write EXACTLY 4 bullet points. Each must be UNDER 8 words — sharp, clear, no fluff.
-3. Do NOT copy or paraphrase anything from the slide content below.
-4. Use beginner-friendly words. No jargon unless it's the topic keyword itself.
+RULES:
+- Do NOT copy or reuse any wording from the slide text below.
+- "description": exactly 1 sentence, max 12 words, use a simple analogy.
+- "keyPoints": exactly 4 items, each max 6 words, start with a verb, no full stops.
 
-Slide content to AVOID repeating: "${slide.description}" | ${slide.keyPoints.join(" | ")}
+Slide text to AVOID: "${slide.description}" | ${slide.keyPoints.join(" | ")}
 
-OUTPUT FORMAT — return ONLY this JSON, nothing else:
-{
-  "description": "One punchy sentence, max 15 words.",
-  "keyPoints": [
-    "Short point, max 8 words",
-    "Short point, max 8 words",
-    "Short point, max 8 words",
-    "Short point, max 8 words"
-  ]
-}`;
+Return ONLY valid JSON, no markdown, no extra text:
+{"description":"...","keyPoints":["...","...","...","..."]}`;
 
   for (const model of GEMINI_MODELS) {
     try {
@@ -49,29 +40,33 @@ OUTPUT FORMAT — return ONLY this JSON, nothing else:
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.85, maxOutputTokens: 400 },
+          generationConfig: { temperature: 0.7, maxOutputTokens: 200 },
         }),
       });
       if (res.status === 429 || res.status === 403) { continue; }
       if (!res.ok) { continue; }
       const data = await res.json();
       const raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
-      // Extract JSON from the response (may be wrapped in markdown code fences)
       const jsonMatch = raw.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         try {
           const parsed = JSON.parse(jsonMatch[0]);
           if (parsed.description && Array.isArray(parsed.keyPoints) && parsed.keyPoints.length >= 2) {
-            return { description: parsed.description, keyPoints: parsed.keyPoints.slice(0, 4) };
+            // Post-process: hard-trim description to first sentence, key points to 7 words max
+            const desc = parsed.description.split(/[.!?]/)[0].trim().replace(/,\s*$/, "") + ".";
+            const kps: string[] = (parsed.keyPoints as string[]).slice(0, 4).map((kp: string) =>
+              kp.split(" ").slice(0, 7).join(" ").replace(/[.,]+$/, "")
+            );
+            return { description: desc, keyPoints: kps };
           }
         } catch { /* malformed JSON — try next model */ }
       }
     } catch { continue; }
   }
-  // Fallback: use the slide's aiInsight as description
+  // Fallback
   return {
-    description: slide.aiInsight,
-    keyPoints: slide.keyPoints,
+    description: slide.aiInsight.split(/[.!?]/)[0].trim() + ".",
+    keyPoints: slide.keyPoints.map(kp => kp.split(" ").slice(0, 7).join(" ")),
   };
 }
 

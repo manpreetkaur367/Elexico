@@ -26,58 +26,73 @@ const LENGTH_CONFIG: Record<Exclude<SummaryLength, "custom">, { label: string; l
   detailed: { label: "Detailed", lines: 14, desc: "14 sentences · in-depth",     temp: 0.7 },
 };
 
-/** Split text into clean individual sentences */
-function splitSentences(text: string): string[] {
-  // Split on ., !, ? followed by space or end — handles abbreviations badly but good enough
-  return text
-    .replace(/\n+/g, " ")
-    .split(/(?<=[.!?])\s+/)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 8); // drop tiny fragments
+/** Extract numbered sentences from model output like "1. Foo\n2. Bar\n3. Baz" */
+function extractNumberedSentences(raw: string): string[] {
+  const lines = raw.replace(/\r\n/g, "\n").split("\n");
+  const result: string[] = [];
+
+  for (const line of lines) {
+    // Match lines starting with "1.", "2.", "10.", etc.
+    const match = line.match(/^\s*\d+\.\s+(.+)/);
+    if (match) {
+      const sentence = match[1].trim();
+      if (sentence.length > 4) result.push(sentence);
+    }
+  }
+  return result;
 }
 
-/** Trim or pad the response to exactly `target` sentences */
-function enforceLength(text: string, target: number): string {
-  const sentences = splitSentences(text);
-  if (sentences.length >= target) {
-    // Trim to target
-    return sentences.slice(0, target).join(" ");
+/** Build extra sentences from slide data when model returns too few */
+function buildPaddingSentences(slide: Slide, needed: number): string[] {
+  const pool: string[] = [
+    slide.description,
+    slide.realWorldExample,
+    slide.aiInsight,
+    ...slide.keyPoints,
+  ].filter(Boolean);
+
+  const sentences: string[] = [];
+  for (const part of pool) {
+    // Each keyPoint is already a clean sentence fragment — wrap it
+    if (!part.endsWith(".") && !part.endsWith("!") && !part.endsWith("?")) {
+      sentences.push(part + ".");
+    } else {
+      sentences.push(part);
+    }
+    if (sentences.length >= needed) break;
   }
-  // We got fewer — return what we have (still better than nothing)
-  return sentences.join(" ");
+  return sentences.slice(0, needed);
 }
 
 async function generateSummary(slide: Slide, lines: number, temperature: number): Promise<string> {
-  // Build a very explicit, count-anchored prompt
-  const numberedList = Array.from({ length: lines }, (_, i) => `${i + 1}. [sentence ${i + 1}]`).join("\n");
-
   const depthInstruction =
     lines <= 4
-      ? "Focus only on the single most important idea — what it is and one key benefit."
-      : lines <= 8
-      ? "Cover what it is, why it matters, how it works, and one real-world use case."
-      : "Cover what it is, why it matters, how it works, its components, trade-offs, real-world use cases, and why developers use it.";
+      ? `Write ${lines} SHORT sentences. Cover only: what ${slide.title} is, and its single biggest benefit.`
+      : lines <= 9
+      ? `Write ${lines} sentences. Cover: what it is, why it matters, how it works, and one real-world example.`
+      : `Write ${lines} sentences. Cover all of: what it is, why it matters, how it works, its key components, trade-offs, real-world use cases, and developer best practices.`;
 
-  const prompt = `You are ElexicoAI, a learning assistant. Your ONLY job right now is to write EXACTLY ${lines} sentences about "${slide.title}".
+  // Build the numbered template the model must fill in
+  const template = Array.from({ length: lines }, (_, i) => `${i + 1}. ___`).join("\n");
 
-STRICT OUTPUT FORMAT — follow this template exactly, replacing each [sentence N]:
-${numberedList}
+  const prompt = `You are a learning assistant. Fill in the numbered template below about "${slide.title}".
 
-RULES:
-1. Output EXACTLY ${lines} numbered sentences — not ${lines - 1}, not ${lines + 1}, exactly ${lines}.
-2. ${depthInstruction}
-3. Every sentence must be self-contained, clear, and flow naturally when read aloud.
-4. No bullet sub-points. No markdown. No headers. Just numbered sentences.
-5. Do NOT write introductions like "Here is a summary" or "Sure!".
+TEMPLATE (fill every blank — do NOT skip any number):
+${template}
 
-SLIDE CONTENT (use this as your knowledge base):
-- Title: ${slide.title}
-- What it is: ${slide.description}
-- Key points: ${slide.keyPoints.join(" | ")}
-- Real-world: ${slide.realWorldExample}
-- Extra context: ${slide.aiInsight}
+INSTRUCTIONS:
+- Replace each ___ with exactly one complete sentence.
+- Output ONLY the numbered list. No intro, no outro, no extra text.
+- ${depthInstruction}
+- Use plain language. No markdown, no sub-bullets.
 
-Now write EXACTLY ${lines} numbered sentences:`;
+KNOWLEDGE BASE:
+Description: ${slide.description}
+Key facts: ${slide.keyPoints.join(" | ")}
+Real world: ${slide.realWorldExample}
+Insight: ${slide.aiInsight}
+
+Fill the template now (${lines} numbered sentences):`;
 
   for (const model of GEMINI_MODELS) {
     try {
@@ -88,7 +103,8 @@ Now write EXACTLY ${lines} numbered sentences:`;
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
             temperature,
-            maxOutputTokens: Math.max(lines * 80, 256),
+            // Give generous token budget so longer outputs are never cut off
+            maxOutputTokens: Math.max(lines * 120, 512),
           },
         }),
       });
@@ -98,35 +114,25 @@ Now write EXACTLY ${lines} numbered sentences:`;
       const raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
       if (!raw) continue;
 
-      // Strip the numbers "1. ", "2. " etc. from the output, then rejoin
-      const stripped = raw
-        .replace(/\r\n/g, "\n")
-        .split("\n")
-        .map((line: string) => line.replace(/^\d+\.\s*/, "").trim())
-        .filter((line: string) => line.length > 4)
-        .join(" ");
+      // Extract numbered sentences reliably
+      let extracted = extractNumberedSentences(raw);
 
-      return enforceLength(stripped, lines);
+      // If model returned fewer than asked, pad with slide data
+      if (extracted.length < lines) {
+        const padding = buildPaddingSentences(slide, lines - extracted.length);
+        extracted = [...extracted, ...padding];
+      }
+
+      // Trim to exactly the requested count
+      return extracted.slice(0, lines).join(" ");
+
     } catch {
       continue;
     }
   }
 
-  // Fallback — manually build from slide data to match length
-  const fallbackParts = [
-    slide.description,
-    ...slide.keyPoints,
-    slide.realWorldExample,
-    slide.aiInsight,
-  ].filter(Boolean);
-
-  const sentences: string[] = [];
-  for (const part of fallbackParts) {
-    const sents = splitSentences(part);
-    sentences.push(...sents);
-    if (sentences.length >= lines) break;
-  }
-  return sentences.slice(0, lines).join(" ");
+  // All models failed — build entirely from slide data
+  return buildPaddingSentences(slide, lines).join(" ");
 }
 
 /* ─── TTS hook ─── */
@@ -222,6 +228,7 @@ export default function AISummaryPlayer({ slide }: Props) {
   const [customLines, setCustomLines] = useState(8);
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [summaryText, setSummaryText] = useState<string | null>(null);
+  const [summaryCount, setSummaryCount] = useState(0); // actual sentence count returned
   const [isGenerating, setIsGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
 
@@ -249,11 +256,15 @@ export default function AISummaryPlayer({ slide }: Props) {
   const handleGenerate = async () => {
     tts.stop();
     setSummaryText(null);
+    setSummaryCount(0);
     setGenError(null);
     setIsGenerating(true);
     try {
       const text = await generateSummary(slide, effectiveLines, effectiveTemp);
+      // Count sentences by splitting on ". " boundaries (safe since numbers were already stripped)
+      const count = text.split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 4).length;
       setSummaryText(text);
+      setSummaryCount(count);
     } catch {
       setGenError("Couldn't generate summary. Please try again.");
     } finally {
@@ -265,9 +276,6 @@ export default function AISummaryPlayer({ slide }: Props) {
     summaryLength === "custom"
       ? `Custom · ${customLines} sentences`
       : LENGTH_CONFIG[summaryLength].desc;
-
-  // Count actual sentences delivered (for the card label)
-  const actualSentenceCount = summaryText ? splitSentences(summaryText).length : effectiveLines;
 
   const isPlaying = tts.state === "playing";
   const isPaused  = tts.state === "paused";
@@ -422,7 +430,7 @@ export default function AISummaryPlayer({ slide }: Props) {
               <div className="flex items-center gap-2 mb-3">
                 <Mic className="w-3.5 h-3.5 text-blue-500" />
                 <span className="text-[11px] font-black text-gray-400 uppercase tracking-[0.14em]">
-                  AI Summary · {actualSentenceCount} sentences
+                  AI Summary · {summaryCount || effectiveLines} sentences
                 </span>
               </div>
               <p className="text-[13px] text-gray-700 leading-relaxed relative z-10">

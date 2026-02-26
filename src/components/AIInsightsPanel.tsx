@@ -23,20 +23,22 @@ function geminiUrl(model: string) {
 async function getAISummaryData(slide: Slide): Promise<{ description: string; keyPoints: string[] }> {
   const prompt = `You are ElexicoAI. A student is learning about "${slide.title}" in a backend engineering course.
 
-Write an explanation that is COMPLETELY DIFFERENT from the slide text below. Do NOT copy or paraphrase the slide wording.
-Use a fresh analogy, a different angle, or a real-world story to explain the concept.
+STRICT RULES:
+1. Description: Write EXACTLY 1 short sentence (max 15 words). Use a simple analogy or plain everyday language. Do NOT copy the slide.
+2. Key Points: Write EXACTLY 4 bullet points. Each must be UNDER 8 words — sharp, clear, no fluff.
+3. Do NOT copy or paraphrase anything from the slide content below.
+4. Use beginner-friendly words. No jargon unless it's the topic keyword itself.
 
-Slide description to AVOID repeating: "${slide.description}"
-Slide key points to AVOID repeating: ${slide.keyPoints.map((k, i) => `${i + 1}. ${k}`).join(" | ")}
+Slide content to AVOID repeating: "${slide.description}" | ${slide.keyPoints.join(" | ")}
 
 OUTPUT FORMAT — return ONLY this JSON, nothing else:
 {
-  "description": "One fresh sentence explaining the concept from a new angle.",
+  "description": "One punchy sentence, max 15 words.",
   "keyPoints": [
-    "Fresh insight #1",
-    "Fresh insight #2",
-    "Fresh insight #3",
-    "Fresh insight #4"
+    "Short point, max 8 words",
+    "Short point, max 8 words",
+    "Short point, max 8 words",
+    "Short point, max 8 words"
   ]
 }`;
 

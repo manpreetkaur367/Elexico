@@ -15,7 +15,12 @@ export function globalStop() {
 function getBestVoice(): SpeechSynthesisVoice | null {
   const voices = window.speechSynthesis.getVoices();
   return (
-    voices.find(v => v.lang.startsWith("en") && (v.name.includes("Google") || v.name.includes("Natural") || v.name.includes("Premium"))) ??
+    // 1st priority: Indian English voices (Ravi, Heera, Neerja, Google हिन्दी English, etc.)
+    voices.find(v => v.lang === "en-IN" && (v.name.includes("Google") || v.name.includes("Ravi") || v.name.includes("Heera") || v.name.includes("Neerja"))) ??
+    // 2nd: any en-IN voice
+    voices.find(v => v.lang === "en-IN") ??
+    // 3rd: Google English as fallback
+    voices.find(v => v.lang.startsWith("en") && v.name.includes("Google")) ??
     voices.find(v => v.lang.startsWith("en")) ??
     null
   );
@@ -46,9 +51,9 @@ export function useTTS(text: string) {
   const _speak = useCallback((t: string) => {
     globalStop();
     const utt = new SpeechSynthesisUtterance(t);
-    utt.rate  = 0.95;
-    utt.pitch = 1.0;
-    utt.lang  = "en-US";
+    utt.rate  = 0.88;   // slightly slower — warm, unhurried Indian cadence
+    utt.pitch = 1.1;    // gentle lift — sounds polite and friendly
+    utt.lang  = "en-IN";
 
     // voices may not be loaded yet — retry once
     const voice = getBestVoice();
@@ -169,7 +174,7 @@ export function useSTT(onResult: (transcript: string) => void) {
     const rec = new SR();
     rec.continuous     = true;   // keep listening until user stops
     rec.interimResults = true;   // show live text as user speaks
-    rec.lang           = "en-US";
+    rec.lang           = "en-IN";
 
     rec.onresult = (e: ISpeechRecognitionEvent) => {
       let interimText = "";

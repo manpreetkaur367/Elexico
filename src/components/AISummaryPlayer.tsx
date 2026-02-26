@@ -21,118 +21,133 @@ function geminiUrl(model: string) {
 type SummaryLength = "short" | "medium" | "detailed" | "custom";
 
 const LENGTH_CONFIG: Record<Exclude<SummaryLength, "custom">, { label: string; lines: number; desc: string; temp: number }> = {
-  short:    { label: "Short",    lines: 3,  desc: "3 sentences · quick glance",  temp: 0.3 },
+  short:    { label: "Short",    lines: 3,  desc: "3 sentences · quick glance",  temp: 0.4 },
   medium:   { label: "Medium",   lines: 7,  desc: "7 sentences · balanced",      temp: 0.5 },
-  detailed: { label: "Detailed", lines: 14, desc: "14 sentences · in-depth",     temp: 0.7 },
+  detailed: { label: "Detailed", lines: 14, desc: "14 sentences · in-depth",     temp: 0.6 },
 };
 
-/** Extract numbered sentences from model output like "1. Foo\n2. Bar\n3. Baz" */
-function extractNumberedSentences(raw: string): string[] {
-  const lines = raw.replace(/\r\n/g, "\n").split("\n");
-  const result: string[] = [];
+/**
+ * Build a rich ordered pool of raw sentences from slide data.
+ * Order: description → keyPoints → realWorldExample → aiInsight → deepDive paragraphs
+ * This pool is always large enough for even "detailed" (14 sentences).
+ */
+function buildSentencePool(slide: Slide): string[] {
+  const pool: string[] = [];
 
-  for (const line of lines) {
-    // Match lines starting with "1.", "2.", "10.", etc.
-    const match = line.match(/^\s*\d+\.\s+(.+)/);
-    if (match) {
-      const sentence = match[1].trim();
-      if (sentence.length > 4) result.push(sentence);
+  // 1. Description (1 sentence)
+  if (slide.description) pool.push(slide.description);
+
+  // 2. Each keyPoint → convert to a full sentence
+  for (const kp of slide.keyPoints) {
+    const s = kp.trim();
+    pool.push(s.endsWith(".") || s.endsWith("!") || s.endsWith("?") ? s : s + ".");
+  }
+
+  // 3. Real-world example
+  if (slide.realWorldExample) pool.push(slide.realWorldExample);
+
+  // 4. AI Insight
+  if (slide.aiInsight) {
+    // aiInsight often has 2 sentences — split them
+    const parts = slide.aiInsight.split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 8);
+    pool.push(...parts);
+  }
+
+  // 5. deepDive paragraphs — split into sentences, add clean ones
+  if (slide.deepDive) {
+    const paragraphs = slide.deepDive.split("\n\n");
+    for (const para of paragraphs) {
+      const sents = para
+        .replace(/^[•\-\*]\s*/gm, "") // strip bullet chars
+        .split(/(?<=[.!?])\s+/)
+        .map(s => s.trim())
+        .filter(s => s.length > 15 && !s.startsWith("•") && !s.startsWith("-"));
+      pool.push(...sents);
     }
   }
-  return result;
+
+  // Deduplicate and cap at 20
+  const seen = new Set<string>();
+  return pool.filter(s => {
+    const key = s.slice(0, 40);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 20);
 }
 
-/** Build extra sentences from slide data when model returns too few */
-function buildPaddingSentences(slide: Slide, needed: number): string[] {
-  const pool: string[] = [
-    slide.description,
-    slide.realWorldExample,
-    slide.aiInsight,
-    ...slide.keyPoints,
-  ].filter(Boolean);
+/**
+ * Use AI to polish a single raw sentence into a smooth, natural spoken sentence.
+ * One sentence in → one sentence out. No counting involved.
+ */
+async function polishSentence(
+  raw: string,
+  slideTitle: string,
+  model: string,
+  temperature: number
+): Promise<string> {
+  const prompt = `Rewrite this one sentence about "${slideTitle}" to sound clear and natural when spoken aloud. Output ONLY the rewritten sentence — no extra words, no numbering, no quotes.
 
-  const sentences: string[] = [];
-  for (const part of pool) {
-    // Each keyPoint is already a clean sentence fragment — wrap it
-    if (!part.endsWith(".") && !part.endsWith("!") && !part.endsWith("?")) {
-      sentences.push(part + ".");
-    } else {
-      sentences.push(part);
-    }
-    if (sentences.length >= needed) break;
+Original: ${raw}
+
+Rewritten:`;
+
+  try {
+    const res = await fetch(geminiUrl(model), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature, maxOutputTokens: 120 },
+      }),
+    });
+    if (!res.ok) return raw; // fallback to raw
+    const data = await res.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    if (!text || text.length < 5) return raw;
+    // Take only the first line (model might add extras)
+    const firstLine = text.split("\n")[0].trim();
+    return firstLine || raw;
+  } catch {
+    return raw;
   }
-  return sentences.slice(0, needed);
 }
 
-async function generateSummary(slide: Slide, lines: number, temperature: number): Promise<string> {
-  const depthInstruction =
-    lines <= 4
-      ? `Write ${lines} SHORT sentences. Cover only: what ${slide.title} is, and its single biggest benefit.`
-      : lines <= 9
-      ? `Write ${lines} sentences. Cover: what it is, why it matters, how it works, and one real-world example.`
-      : `Write ${lines} sentences. Cover all of: what it is, why it matters, how it works, its key components, trade-offs, real-world use cases, and developer best practices.`;
+async function generateSummary(slide: Slide, lines: number, temperature: number): Promise<string[]> {
+  // Step 1 — build the pool and slice to exactly `lines` sentences
+  const pool = buildSentencePool(slide);
+  const rawSentences = pool.slice(0, lines);
 
-  // Build the numbered template the model must fill in
-  const template = Array.from({ length: lines }, (_, i) => `${i + 1}. ___`).join("\n");
+  // If pool is smaller than requested (unlikely but safe), repeat from pool
+  while (rawSentences.length < lines) {
+    rawSentences.push(pool[rawSentences.length % pool.length] ?? slide.description);
+  }
 
-  const prompt = `You are a learning assistant. Fill in the numbered template below about "${slide.title}".
-
-TEMPLATE (fill every blank — do NOT skip any number):
-${template}
-
-INSTRUCTIONS:
-- Replace each ___ with exactly one complete sentence.
-- Output ONLY the numbered list. No intro, no outro, no extra text.
-- ${depthInstruction}
-- Use plain language. No markdown, no sub-bullets.
-
-KNOWLEDGE BASE:
-Description: ${slide.description}
-Key facts: ${slide.keyPoints.join(" | ")}
-Real world: ${slide.realWorldExample}
-Insight: ${slide.aiInsight}
-
-Fill the template now (${lines} numbered sentences):`;
-
+  // Step 2 — find a working model (test with one quick call)
+  let workingModel = GEMINI_MODELS[0];
   for (const model of GEMINI_MODELS) {
     try {
-      const res = await fetch(geminiUrl(model), {
+      const testRes = await fetch(geminiUrl(model), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature,
-            // Give generous token budget so longer outputs are never cut off
-            maxOutputTokens: Math.max(lines * 120, 512),
-          },
+          contents: [{ parts: [{ text: "say ok" }] }],
+          generationConfig: { maxOutputTokens: 5 },
         }),
       });
-      const data = await res.json();
-      if (res.status === 429 || res.status === 403) continue;
-      if (!res.ok) continue;
-      const raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-      if (!raw) continue;
-
-      // Extract numbered sentences reliably
-      let extracted = extractNumberedSentences(raw);
-
-      // If model returned fewer than asked, pad with slide data
-      if (extracted.length < lines) {
-        const padding = buildPaddingSentences(slide, lines - extracted.length);
-        extracted = [...extracted, ...padding];
+      if (testRes.status !== 429 && testRes.status !== 403 && testRes.ok) {
+        workingModel = model;
+        break;
       }
-
-      // Trim to exactly the requested count
-      return extracted.slice(0, lines).join(" ");
-
-    } catch {
-      continue;
-    }
+    } catch { continue; }
   }
 
-  // All models failed — build entirely from slide data
-  return buildPaddingSentences(slide, lines).join(" ");
+  // Step 3 — polish each sentence individually (parallel for speed)
+  const polished = await Promise.all(
+    rawSentences.map(s => polishSentence(s, slide.title, workingModel, temperature))
+  );
+
+  return polished; // exactly `lines` sentences, guaranteed
 }
 
 /* ─── TTS hook ─── */
@@ -227,10 +242,12 @@ export default function AISummaryPlayer({ slide }: Props) {
   const [summaryLength, setSummaryLength] = useState<SummaryLength>("medium");
   const [customLines, setCustomLines] = useState(8);
   const [showCustomInput, setShowCustomInput] = useState(false);
-  const [summaryText, setSummaryText] = useState<string | null>(null);
-  const [summaryCount, setSummaryCount] = useState(0); // actual sentence count returned
+  const [sentences, setSentences] = useState<string[]>([]); // each item = one guaranteed sentence
   const [isGenerating, setIsGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
+
+  // Join sentences into one string for TTS
+  const summaryText = sentences.length > 0 ? sentences.join(" ") : null;
 
   const tts = useTTS(summaryText ?? "");
 
@@ -240,7 +257,7 @@ export default function AISummaryPlayer({ slide }: Props) {
     if (prevSlideId.current !== slide.id) {
       prevSlideId.current = slide.id;
       tts.stop();
-      setSummaryText(null);
+      setSentences([]);
       setGenError(null);
     }
   }, [slide.id, tts.stop]);
@@ -255,16 +272,12 @@ export default function AISummaryPlayer({ slide }: Props) {
 
   const handleGenerate = async () => {
     tts.stop();
-    setSummaryText(null);
-    setSummaryCount(0);
+    setSentences([]);
     setGenError(null);
     setIsGenerating(true);
     try {
-      const text = await generateSummary(slide, effectiveLines, effectiveTemp);
-      // Count sentences by splitting on ". " boundaries (safe since numbers were already stripped)
-      const count = text.split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 4).length;
-      setSummaryText(text);
-      setSummaryCount(count);
+      const result = await generateSummary(slide, effectiveLines, effectiveTemp);
+      setSentences(result); // always exactly `effectiveLines` items
     } catch {
       setGenError("Couldn't generate summary. Please try again.");
     } finally {
@@ -280,7 +293,7 @@ export default function AISummaryPlayer({ slide }: Props) {
   const isPlaying = tts.state === "playing";
   const isPaused  = tts.state === "paused";
   const isDone    = tts.state === "done";
-  const hasAudio  = summaryText !== null && !isGenerating;
+  const hasAudio  = sentences.length > 0 && !isGenerating;
 
   return (
     <div className="flex flex-col gap-5 px-5 py-4">
@@ -376,7 +389,7 @@ export default function AISummaryPlayer({ slide }: Props) {
             </motion.div>
             Generating…
           </>
-        ) : summaryText ? (
+        ) : sentences.length > 0 ? (
           <>
             <RefreshCw className="w-4 h-4" />
             Regenerate Summary
@@ -405,16 +418,16 @@ export default function AISummaryPlayer({ slide }: Props) {
 
       {/* ── Summary card + audio player ── */}
       <AnimatePresence>
-        {hasAudio && summaryText && (
+        {hasAudio && sentences.length > 0 && (
           <motion.div
-            key={summaryText.slice(0, 20)}
+            key={sentences[0]?.slice(0, 20)}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.25 }}
             className="flex flex-col gap-4"
           >
-            {/* Summary text card */}
+            {/* Summary text card — numbered list so count is visually clear */}
             <div
               className="rounded-2xl p-4 relative overflow-hidden"
               style={{ background: "#f8faff", border: "1px solid #e2e8f0" }}
@@ -427,15 +440,39 @@ export default function AISummaryPlayer({ slide }: Props) {
                   transform: "translate(30%, -30%)",
                 }}
               />
-              <div className="flex items-center gap-2 mb-3">
-                <Mic className="w-3.5 h-3.5 text-blue-500" />
-                <span className="text-[11px] font-black text-gray-400 uppercase tracking-[0.14em]">
-                  AI Summary · {summaryCount || effectiveLines} sentences
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2">
+                  <Mic className="w-3.5 h-3.5 text-blue-500" />
+                  <span className="text-[11px] font-black text-gray-400 uppercase tracking-[0.14em]">
+                    AI Summary
+                  </span>
+                </div>
+                <span
+                  className="text-[10px] font-black px-2 py-0.5 rounded-full"
+                  style={{ background: "#2563eb18", color: "#2563eb" }}
+                >
+                  {sentences.length} sentences
                 </span>
               </div>
-              <p className="text-[13px] text-gray-700 leading-relaxed relative z-10">
-                {summaryText}
-              </p>
+              <ol className="space-y-2 relative z-10">
+                {sentences.map((s, i) => (
+                  <motion.li
+                    key={i}
+                    initial={{ opacity: 0, x: -6 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.04 }}
+                    className="flex gap-2.5 items-start"
+                  >
+                    <span
+                      className="flex-shrink-0 w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-black mt-0.5"
+                      style={{ background: "#2563eb18", color: "#2563eb" }}
+                    >
+                      {i + 1}
+                    </span>
+                    <p className="text-[13px] text-gray-700 leading-relaxed">{s}</p>
+                  </motion.li>
+                ))}
+              </ol>
             </div>
 
             {/* ── Audio player controls ── */}
@@ -570,7 +607,7 @@ export default function AISummaryPlayer({ slide }: Props) {
       </AnimatePresence>
 
       {/* ── Empty state ── */}
-      {!isGenerating && !summaryText && !genError && (
+      {!isGenerating && sentences.length === 0 && !genError && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

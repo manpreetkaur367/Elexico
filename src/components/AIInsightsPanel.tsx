@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, Send, Bot, User, CheckCircle2, Trash2, Pencil, Check, X, BookOpen } from "lucide-react";
 import type { Slide } from "../data/slides";
+import AISummaryPlayer from "./AISummaryPlayer";
 
 const GEMINI_API_KEY = (import.meta.env.VITE_GEMINI_API_KEY || "") as string;
 
@@ -94,7 +95,7 @@ export default function AIInsightsPanel({ slide }: AIInsightsPanelProps) {
 
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
-  const [activeTab, setActiveTab] = useState<"summary" | "chat">("summary");
+  const [activeTab, setActiveTab] = useState<"summary" | "chat" | "listen">("summary");
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
@@ -188,7 +189,7 @@ export default function AIInsightsPanel({ slide }: AIInsightsPanelProps) {
 
       {/* ── Tab switcher ── */}
       <div className="flex px-4 pt-3.5 pb-2 gap-1.5 flex-shrink-0">
-        {(["summary", "chat"] as const).map((tab) => (
+        {(["summary", "listen", "chat"] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -198,7 +199,7 @@ export default function AIInsightsPanel({ slide }: AIInsightsPanelProps) {
               : { background: "transparent", color: "#94a3b8", borderColor: "transparent", border: "1px solid" }
             }
           >
-            {tab}
+            {tab === "listen" ? "🎧 Listen" : tab}
             {tab === "chat" && messages.length > 0 && (
               <motion.span
                 initial={{ scale: 0 }}
@@ -276,6 +277,20 @@ export default function AIInsightsPanel({ slide }: AIInsightsPanelProps) {
                 ))}
               </div>
             </div>
+          </motion.div>
+        )}
+
+        {/* ══ LISTEN TAB ══ */}
+        {activeTab === "listen" && (
+          <motion.div
+            key="listen"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2 }}
+            className="flex-1 overflow-y-auto scrollbar-thin min-h-0"
+          >
+            <AISummaryPlayer slide={slide} />
           </motion.div>
         )}
 
